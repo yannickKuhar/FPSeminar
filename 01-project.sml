@@ -62,3 +62,35 @@ in
     | Or l => (getVarsList l)
     | Eq l => (getVarsList l)
 end
+
+fun eval vars exp  =
+let
+    fun And'(list : bool list) : bool =
+        case list of
+        [] => true
+        | h::t => h andalso (And' t)
+    
+    fun Or'(list : bool list) : bool =
+        case list of
+        [] => false
+        | h::t => h orelse Or'(t)
+
+    fun Eq'(list : bool list) : bool =
+        case list of
+        [] => true
+        | h::t =>  if (List.all(fn x => x = h) list) then true else false
+in 
+    case exp of
+    True => true
+    | False => false
+    | Var i => if List.exists (fn x => x = i) vars then true else false 
+    | Not i => not (eval vars i)
+    | Imp (i, j) => not (eval vars i) orelse (eval vars j)
+    | And l => And'(map (fn x => (eval vars x)) l)
+    | Or l => Or'(map (fn x => (eval vars x)) l)
+    | Eq l => Eq'(map (fn x => (eval vars x)) l)
+end
+
+val exp1 = (Eq [True, Eq [False, Var 3, And [And [], Or [Var 1, Not (Eq [Var 4, False, True])], Imp (True, Var 2)]]]);
+
+eval [2,3] exp1;
