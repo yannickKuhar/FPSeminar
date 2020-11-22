@@ -227,9 +227,52 @@ in
     | Eq l =>"Equivalent[" ^ removeLastChar (List.foldr (fn (acc, x) => acc ^ ", " ^ x) "" (List.map (fn (x) => toWolframLang f x)  l)) ^ "]"
 end
 
-val exp1 = (Eq [True, Eq [False, Var 3, And [And [], Or [Var 1, Not (Eq [Var 4, False, True])], Imp (True, Var 2)]]]);
-val exp2 = And [Not (Var 3), Not (Var 2)];
-val exp3 = And [Not (Var 1), Not (Var 2)];
+fun prTestEq seed exp1 exp2 =
+let
+    fun get_bools(union, Next(n, f), acc) = 
+        case union of
+        [] => rev acc
+        | h::t => if (int2bool n) then get_bools(t, f(), h::acc) else get_bools(t, f(), acc)
 
-fun prTestEq seed exp 1 exp2 =
-    lcg(seed)
+    fun rm_duplicates (list, acc) = 
+        case list of
+        [] => rev acc
+        | h::t => if List.exists (fn x => x = h) acc then rm_duplicates(t, acc) else rm_duplicates(t, h::acc)
+
+    val union = rm_duplicates ((getVars exp1) @ (getVars exp2), [])
+    val Next(seed, f) = lcg(seed)
+    val vars = get_bools(union, Next(seed, f), [])
+in
+    (eval vars exp1) = (eval vars exp2)
+end
+
+fun to_bin(vars, n) = 
+    let 
+        fun bools_to_vars(vars, bools, acc) =
+            case bools of
+            [] => rev acc
+            | h::t => if h then bools_to_vars(tl vars, t, (hd vars)::acc) else bools_to_vars(tl vars, t, acc)
+
+        fun to_bin'(n, acc) = 
+            case n of
+            0 => acc
+            | num =>  if num mod 2 = 0 then to_bin'(num div 2, false :: acc) else to_bin'(num div 2, true :: acc)
+
+        val bin = to_bin'(n, [])
+    in
+        bools_to_vars(vars, List.tabulate((List.length vars) - (List.length bin), fn x => false) @ bin, [])
+    end
+
+fun bruteforce exp =
+let
+   fun bruteforce' (vars, n) =
+        if n < 0 then NONE
+        else 
+            if eval (to_bin(vars, n)) exp then 
+                SOME (to_bin(vars, n))
+            else
+                bruteforce' (vars, n - 1)            
+    val vars = getVars exp;
+in
+    bruteforce' (vars, List.length vars)
+end
