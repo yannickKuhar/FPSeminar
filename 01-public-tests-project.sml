@@ -154,7 +154,7 @@ val test3 = toWolframLang (fn x => x)
       "Equivalent[Equivalent[False, Var[\"a\"], And[And[], Or[Var[\"b\"], Not[Equivalent[Var[\"test\"]]]], Implies[True, Var[\"2\"]]]]]";
 val _ = (all_tests := !all_tests @ [test1, test2, test3]);
 
-val _ = print "---------- satSolver ----------\n";
+(* val _ = print "---------- satSolver ----------\n";
 val _ : ''a expression -> ''a list option = satSolver;
 val test1 = satSolver (True : int expression) = SOME [];
 val test2 = satSolver (False : int expression) = NONE;
@@ -166,9 +166,11 @@ val test6 = let val sol = satSolver (And [Or [Var 1, Not (Var 2)]])
 val test7 = let val sol = satSolver (And [Or [Var 1, Not (Var 1)]])
             in sol = SOME [] orelse sol = SOME [1] end;
 val test8 = satSolver (And [Or [Var 1, Var 3], Or [Not (Var 1), Not (Var 3)],
-                        Or[Not (Var 3), Var 1]]) = NONE;
-val test9 = satSolver exp6 = SOME [3,6];
-val _ = (all_tests := !all_tests @ [test1, test2, test3, test4, test5, test6, test6, test7, test8, test9]);
+                        Or[Not (Var 3), Var 1]]) = SOME [1];
+val test9 = satSolver (And [Or [Var 1, Var 3], Or [Not (Var 1), Not (Var 3)],
+                        Or[Not (Var 3), Var 1], Or[Not (Var 1), Var 3]]) = NONE;
+val test10 = let val sol = satSolver exp6 in sol = SOME [3, 6] orelse sol = SOME [6, 3] end;
+val _ = (all_tests := !all_tests @ [test1, test2, test3, test4, test5, test6, test6, test7, test8, test9, test10]); *)
 
 val _ = print "---------- bruteforce ----------\n";
 val _ : ''a expression -> ''a list option = bruteforce;
@@ -178,7 +180,7 @@ val test3 = bruteforce (Or [] : int expression) = NONE;
 val test4 = let val sol = bruteforce
     (And [Or [Var 1, Var 3], Or [Not (Var 1), Not (Var 3)], Eq [Not (Var 3), Var 1]])
     in sol = SOME [1] orelse sol = SOME [3] end;
-val test5 = bruteforce exp6 = SOME [3,6];
+val test5 = let val sol = bruteforce exp6 in sol = SOME [3, 6] orelse sol = SOME [6, 3] end;
 val _ = (all_tests := !all_tests @ [test1, test2, test3, test4, test5]);
 
 
