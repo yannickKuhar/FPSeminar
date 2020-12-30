@@ -41,6 +41,7 @@ fun bitNeg exp =
     True => False
     | False => True
 
+(* Doda elemente iz l2 v l1 le, ce niso duplikati.*)
 fun checkCombine(l1, l2) = 
     case l2 of
     [] => l1
@@ -50,6 +51,7 @@ fun checkCombine(l1, l2) =
         else
             checkCombine(l1 @ [h], t)
 
+(* Funkcija se sprehodi po ves izrazih in ce je izraz Var e vrne nazaj [e] oz klice funkcijo za prehod po seznamu izrazov kjer je to potrebno. *)
 fun getVars (exp : ''a expression) : ''a list =
 let
     
@@ -69,6 +71,8 @@ in
     | Eq l => (getVarsList l)
 end
 
+(*Izrazi True, False, And[], Or[], Eq[] so terminali, gremo do njih z rekurzijo in nato evalviramo s ustrezno logicnoi poreacijo *)
+(*Funkcijo se da olepsat s uporabo fold namesto And', Or; in Eq'.*)
 fun eval vars exp  =
 let
     fun And'(list : bool list) : bool =
@@ -97,6 +101,8 @@ in
     | Eq l => Eq'(map (fn x => (eval vars x)) l)
 end
 
+(* Z aninimno spremenljivko bi se dalo par vrstic prisparat. Namen funkcije je, da zamenja izraze
+z praznim seznamom ali z seznamom, ki ima le en element s ustrezno konstanto.*)
 fun rmEmpty (exp: 'a expression) : 'a expression = 
     case exp of
     True => True
@@ -114,12 +120,14 @@ fun rmEmpty (exp: 'a expression) : 'a expression =
     | Eq l => Eq (List.map (fn x => (rmEmpty x)) l)
     | Imp (e1, e2) => Imp ((rmEmpty e1), (rmEmpty e2))
 
+(* Naredi pare iz seznama npr [1,2,3,4] => [(1,2),(2,3),(3,4)]*)
 fun makePairs (l : 'a list) : ('a * 'a) list =
     case l of
     [] => []
     | [i] => []
     | h::t => [(h, (hd t))] @ makePairs(t)
 
+(* Uporaba h::t namesto l*)
 fun beautify (exp: 'a expression) : 'a expr =
     case rmEmpty exp of
     True => T
@@ -149,6 +157,7 @@ fun pushNegations(exp : 'a expression) : 'a expression =
     | Or l => Or (List.map (fn x => pushNegations x) l)
     | Eq l => Eq (List.map (fn x => pushNegations x) l)
 
+(*Podvojena koda s isVarList v isCNF, ter ni optimizacije s aninimno spremenljivko.*)
 fun isSimple(exp : 'a expression) : bool =
     case exp of
     True => false
@@ -162,7 +171,8 @@ fun isSimple(exp : 'a expression) : bool =
     | And l => List.foldl (fn (acc, x) => acc andalso x) true (map isSimple l)
     | Or l => List.foldl (fn (acc, x) => acc andalso x) true (map isSimple l)
     | Eq l => List.foldl (fn (acc, x) => acc andalso x) true (map isSimple l)
-    
+
+(* Obstajajo primeri kjer se zacikla. *)
 fun rmConstants(exp : ''a expression) : ''a expression =
     case rmEmpty exp of
     True => True
@@ -201,8 +211,6 @@ fun rmVars (exp : ''a expression) : ''a expression =
     True => True
     | False => False
     | Var e => Var e
-    | Not True => False
-    | Not False => True
     | Not e => Not (rmVars e)
     | Imp (e1, e2) => if rmVars e1 = rmVars e2 then True else Imp(rmVars e1, rmVars e2)
     | And l => rmEmpty (And (eliminateDuplicates (List.map rmVars l, [])))
@@ -277,6 +285,7 @@ in
     | _ => false
 end
 
+(* Podobno kot get vars le da vrne tudi obliko. *)
 fun getIsolatedVars exp =
 let
     fun getIsolatedVarsList exp_l =
@@ -293,6 +302,7 @@ in
     | _ => []
 end
 
+(* Zamenjamo spremenljivko z zeljeno vrednostjo. *)
 fun replaceWith (exp, e, r) = 
 let
     fun replaceWithList (l, e, r) =
@@ -329,8 +339,8 @@ fun removeVars (exp, vars, removed) =
 
 fun step1 (exp, acc) =
 let
-    val vars = getIsolatedVars exp
-    val removedVars = removeVars (exp, vars, [])
+    val vars = getIsolatedVars exp (* Dobimo izolorane spr. *)
+    val removedVars = removeVars (exp, vars, []) (* Katere smo odstranil. *)
     val exp' = replaceAllWith (exp, vars, True)
 in
     case vars of
@@ -411,6 +421,7 @@ fun toBin(vars, n) =
         boolsToVars(vars, List.tabulate((List.length vars) - (List.length bin), fn x => false) @ bin, [])
     end
 
+(* Naivno lepil 0 na zacetek. *)
 fun bruteforce exp =
 let
    fun bruteforce' (vars, n) =
