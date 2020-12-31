@@ -121,13 +121,13 @@
           [(and (true? a) (true? b)) (true)]
           [(and (qq? a) (qq? b)) (letrec ([imen (* (zz-n (qq-e2 a)) (zz-n (qq-e2 b)))]
                                           [stev (+ (* (zz-n (qq-e1 a)) (zz-n (qq-e2 b))) (* (zz-n (qq-e1 b)) (zz-n (qq-e2 a))))]
-                                          [sht (shorten stev imen)]) (qq (zz (car sht)) (zz (cdr sht))))]
+                                          [sht (shorten stev imen)]) (qq_format (qq (zz (car sht)) (zz (cdr sht)))))]
           [(and (qq? a) (zz? b)) (letrec ([imen (zz-n (qq-e2 a))]
                                           [stev (+ (zz-n (qq-e1 a)) (* (zz-n (qq-e2 a)) (zz-n b)))]
-                                          [sht (shorten stev imen)]) (qq (zz (car sht)) (zz (cdr sht))))]
+                                          [sht (shorten stev imen)]) (qq_format  (qq (zz (car sht)) (zz (cdr sht)))))]
           [(and (zz? a) (qq? b)) (letrec ([imen (zz-n (qq-e2 b))]
                                           [stev (+ (zz-n (qq-e1 b)) (* (zz-n (qq-e2 b)) (zz-n a)))]
-                                          [sht (shorten stev imen)]) (qq (zz (car sht)) (zz (cdr sht))))]
+                                          [sht (shorten stev imen)]) (qq_format (qq (zz (car sht)) (zz (cdr sht)))))]
           [(and (..? a) (..? b)) (join a b)]
           [(and (s? a) (s? b)) (s (set-union (s-es a) (s-es b)))]
           [#t (error "add operation not supported")])))
@@ -158,13 +158,13 @@
           [(and (true? a) (true? b)) (true)]
           [(and (qq? a) (qq? b)) (letrec ([imen (* (zz-n (qq-e2 a)) (zz-n (qq-e2 b)))]
                                           [stev (* (zz-n (qq-e1 a)) (zz-n (qq-e1 b)))]
-                                          [sht (shorten stev imen)]) (qq (zz (car sht)) (zz (cdr sht))))]
+                                          [sht (shorten stev imen)]) (qq_format (qq (zz (car sht)) (zz (cdr sht)))))]
           [(and (qq? a) (zz? b)) (letrec ([imen (* (zz-n (qq-e2 a)) (zz-n b))]
                                           [stev (* (zz-n (qq-e1 a)) (zz-n b))]
-                                          [sht (shorten stev imen)]) (qq (zz (car sht)) (zz (cdr sht))))]
+                                          [sht (shorten stev imen)]) (qq_format (qq (zz (car sht)) (zz (cdr sht)))))]
           [(and (zz? a) (qq? b)) (letrec ([imen (* (zz-n (qq-e2 b)) (zz-n a))]
                                           [stev (* (zz-n (qq-e1 b)) (zz-n a))]
-                                          [sht (shorten stev imen)]) (qq (zz (car sht)) (zz (cdr sht))))]
+                                          [sht (shorten stev imen)]) (qq_format (qq (zz (car sht)) (zz (cdr sht)))))]
           [(and (s? a) (s? b)) (s (cartps (s-es a) (s-es b)))]
           [#t (error "mul operation not supported")])))
 
@@ -272,7 +272,7 @@
     (cond [(zz? a) (zz (- 0 (zz-n a)))]
           [(true? a) (false)]
           [(false? a) (true)]
-          [(qq? a) (qq (zz (- 0 (zz-n (qq-e1 a)))) (qq-e2 a))]
+          [(qq? a) (qq_format (qq (zz (- 0 (zz-n (qq-e1 a)))) (qq-e2 a)))]
           [#t (error "negation not supported")])))
 
 ; All? and any? logic.
