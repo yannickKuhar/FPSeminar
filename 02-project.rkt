@@ -42,6 +42,11 @@
 (struct vars (s e1 e2) #:transparent)
 (struct valof (s) #:transparent)
 
+(struct closure (env f))
+(struct fun (name farg body) #:transparent)
+(struct proc (name body) #:transparent)
+(struct call (e args) #:transparent)
+
 ; General helpers.
 (define (qq_format e)
   (cond [(qq? e) (if (or (= (zz-n (qq-e2 e)) 0) (= (zz-n (qq-e1 e)) (zz-n (qq-e2 e))))
@@ -311,9 +316,23 @@
                        (false))]
           [#t (error "any not supported")])))
 
-; Main interpreter function.
-; (fill_env (list "a" "b" "c") (list 1 2 3) null) vrne: '(("c" . 3) ("b" . 2) ("a" . 1))
-; Mogoce bi blo treba vrstni red popravit zarad sencenja?
+
+;;;;; Functions. ;;;;;
+
+;;;;; Macros. ;;;;;
+(define (numerator e1)
+  (left e1))
+
+(define (denumerator e1)
+  (right e1))
+
+(define (gt? e1 e2)
+  (~ (leq? e1 e2)))
+
+;;;;; Main interpreter function. ;;;;;
+
+; (fill_env (list "a" "b" "c") (list (zz 1) (zz 2) (zz 2)) null) vrne: '(("c" . (zz 3)) ("b" . (zz 2)) ("a" . (zz 1)))
+; Mogoce bi blo treba vrstni red popravit zarad sencenja? Kot kaze ne.
 (define (fill_env s e1 env)
   (if (null? s)
       env
@@ -358,4 +377,12 @@
                       (if ans
                           (cdr ans)
                           (error "var not ion env")))]
+        [(proc? e) (closure env e)]
+        [(call? e) (let ([o (fri (call-e e) env)])
+                         (if (closure? o)
+                             (if (proc? (closure-f o))
+                                 (fri (proc-body (closure-f o)) (closure-env o))
+                                 (fri (fun-body (closure-f o)) (closure-env o)))
+                             (error "fun call not correct")))]
+        [(fun? e) (closure env e)]
         [#t (error "expression not supported by FR")]))
