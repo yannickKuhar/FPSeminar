@@ -3,7 +3,6 @@
 ; da ne izgubimo funkcij `numerator` in `denominator` zaradi "naših" makrojev 
 (require (rename-in racket (numerator qnumerator)(denominator qdenominator)))
 
-#|
 (provide false true zz qq .. empty s
          if-then-else
          is-zz? is-qq? is-bool? is-seq? is-proper-seq? is-empty? is-set?
@@ -11,7 +10,6 @@
          vars valof fun proc closure call
          gt? inv numerator denominator filtering folding mapping
          fri)
-|#
 
 ; Data structure definitions.
 (struct true () #:transparent)
@@ -120,7 +118,9 @@
 
 (define (join z1 z2)
   (if (not (..? z1))
-      (.. z1 z2)
+      (if (empty? z1)
+          z2
+          (.. z1 z2))
       (.. (..-e1 z1) (join (..-e2 z1) z2))))
 
 (define (add_logic e1 e2 env)
@@ -142,6 +142,7 @@
                                           [sht (shorten stev imen)]) (qq_format (qq (zz (car sht)) (zz (cdr sht)))))]
           [(and (..? a) (..? b)) (join a b)]
           [(and (s? a) (s? b)) (s (set-union (s-es a) (s-es b)))]
+          [(and (empty? a) (empty? b)) (empty)]
           [#t (error "add operation not supported")])))
 
 ; Mul logic.
@@ -158,7 +159,7 @@
 (define (make_pairs e l)
   (if (null? l)
       null
-      (cons (cons e (car l)) (make_pairs e (cdr l)))))
+      (cons (.. e (car l)) (make_pairs e (cdr l)))))
 
 (define (mul_logic e1 e2 env)
   (let ([a (fri e1 env)]
@@ -178,6 +179,7 @@
                                           [stev (* (zz-n (qq-e1 b)) (zz-n a))]
                                           [sht (shorten stev imen)]) (qq_format (qq (zz (car sht)) (zz (cdr sht)))))]
           [(and (s? a) (s? b)) (s (cartps (s-es a) (s-es b)))]
+          [(and (empty? a) (empty? b)) (empty)]
           [#t (error "mul operation not supported")])))
 
 ; Leq logic.
@@ -245,7 +247,8 @@
                                      (false))]
           [(and (s? a) (s? b)) (if (equal? (s-es a) (s-es b))
                                    (true)
-                                   (false))])))
+                                   (false))]
+          [#t (false)])))
           
 ; (.. (zz 1) (.. (zz 2) (.. (zz 3) (zz 4))))
 
@@ -312,14 +315,15 @@
 (define (vars_logic e env)
   (if (list? (vars-s e))
       (fri (vars-e2 e) (fill_env (vars-s e) (vars-e1 e) env))
-      (begin (set! env (cons (cons (vars-s e) (fri (vars-e1 e) env)) env))
+      (begin ; (set! env (cons (cons (vars-s e) (fri (vars-e1 e) env)) env))
+             (set! env (append env (cons (cons (vars-s e) (fri (vars-e1 e) env)) null)))
              (fri (vars-e2 e) env))))
 
 (define (valof_logic e env)
-  (let ([ans (assoc (valof-s e) env)])
+  (let ([ans (assoc (valof-s e) (reverse env))])
     (if ans
         (cdr ans)
-        (error "var not ion env"))))
+        (error "var not in env"))))
 
 ;;;;; Functions. ;;;;;
 (define (call_logic e env)
@@ -342,15 +346,28 @@
 (define (gt? e1 e2)
   (~ (leq? e1 e2)))
 
+(define (inv e1)
+  (zz -1)) 
+
+(define (mapping f seq)
+  (zz -1))
+
+(define (filtering f seq)
+  (zz -1))
+
+(define (folding f init seq)
+  (zz -1))
+
 ;;;;; Main interpreter function. ;;;;;
 
-; (fill_env (list "a" "b" "c") (list (zz 1) (zz 2) (zz 2)) null) vrne: '(("c" . (zz 3)) ("b" . (zz 2)) ("a" . (zz 1)))
+; (fill_env (list "a" "b" "c") (list (zz 1) (zz 2) (zz 3)) null) vrne: '(("c" . (zz 3)) ("b" . (zz 2)) ("a" . (zz 1)))
 ; Mogoce bi blo treba vrstni red popravit zarad sencenja? Kot kaze ne.
 (define (fill_env s e1 env)
   (if (null? s)
       env
       (begin
-        (set! env (cons (cons (car s) (fri (car e1) env)) env))
+        ; (set! env (cons (cons (car s) (fri (car e1) env)) env))
+        (set! env (append env (cons (cons (car s) (fri (car e1) env)) null)))
         (fill_env (cdr s) (cdr e1) env))))
 
 (define (fri e env)
@@ -401,5 +418,9 @@
 ;                                              (zz 1)
 ;                                              (mul (valof "n") (call (valof "f") (list (add (valof "n") (zz -1))))) )) (list (zz 5)))  null)
 
-; (require racket/trace)
+(require racket/trace)
 ; (trace fri)
+; (trace fill_env)
+(trace join)
+
+; (fri (=? (zz 2) (qq (zz 4) (zz 2))) null)
