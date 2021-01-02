@@ -42,15 +42,15 @@
 (struct vars (s e1 e2) #:transparent)
 (struct valof (s) #:transparent)
 
-(struct closure (env f))
+(struct closure (env f) #:transparent) ; TODO: Remove transparent
 (struct fun (name farg body) #:transparent)
 (struct proc (name body) #:transparent)
 (struct call (e args) #:transparent)
 
 ; General helpers.
 (define (qq_format e)
-  (cond [(qq? e) (if (or (= (zz-n (qq-e2 e)) 0) (= (zz-n (qq-e1 e)) (zz-n (qq-e2 e))))
-                     (error "invalid qq: denominator is 0 or numbers are not different")
+  (cond [(qq? e) (if (or (= (zz-n (qq-e2 e)) 0))
+                     (error "invalid qq: denominator is 0")
                       (cond [(or (and (> (zz-n (qq-e1 e)) 0) (< (zz-n (qq-e2 e)) 0))
                                  (and (< (zz-n (qq-e1 e)) 0) (< (zz-n (qq-e2 e)) 0)))
                              (qq (zz (- 0 (zz-n (qq-e1 e)))) (zz (- 0 (zz-n (qq-e2 e)))))]
@@ -98,6 +98,13 @@
       (false)))
 
 ;;;;; Operation logic functions. ;;;;;
+
+; If then else logic.
+(define (if_the_else_logic e env)
+  (let ([cnd (fri (if-then-else-condition e) env)])
+    (cond [(true? cnd) (fri (if-then-else-e1 e) env)]
+          [(false? cnd) (fri (if-then-else-e2 e) env)]
+          [#t (error "if-then-else condition invalid")])))
 
 ; Add logic.
 (define (gcd a b)
@@ -192,12 +199,6 @@
           [(and (qq? a) (qq? b)) (if (<= (/ (zz-n (qq-e1 a)) (zz-n (qq-e2 a))) (/ (zz-n (qq-e1 b)) (zz-n (qq-e2 b))))
                                      (true)
                                      (false))]
-          [(and (qq? a) (zz? b)) (if (<= (/ (zz-n (qq-e1 a)) (zz-n (qq-e2 a))) (zz-n b))
-                                     (true)
-                                     (false))]
-          [(and (zz? a) (qq? b)) (if (<= (zz-n a) (/ (zz-n (qq-e1 b)) (zz-n (qq-e2 b))))
-                                     (true)
-                                     (false))]
           [(and (..? a) (..? b)) (if (<= (zap_len a) (zap_len b))
                                      (true)
                                      (false))]
@@ -224,8 +225,6 @@
                 [(and (false? z1) (false? z2)) #t]
                 [(and (zz? z1) (zz? z2)) (= (zz-n z1) (zz-n z2))]
                 [(and (qq? z1) (qq? z2)) (= (/ (zz-n (qq-e1 z1)) (zz-n (qq-e2 z1))) (/ (zz-n (qq-e1 z2)) (zz-n (qq-e2 z2))))]
-                [(and (qq? z1) (zz? z2)) (= (/ (zz-n (qq-e1 z1)) (zz-n (qq-e2 z1))) (zz-n z2))]
-                [(and (zz? z1) (qq? z2)) (= (/ (zz-n z1) (/ (zz-n (qq-e1 z2)) (zz-n (qq-e2 z2)))))]
                 [#t #f]))))
           
 (define (eq_logic e1 e2 env)
@@ -239,12 +238,6 @@
                                     (true)
                                     (false))]
           [(and (qq? a) (qq? b)) (if (= (/ (zz-n (qq-e1 a)) (zz-n (qq-e2 a))) (/ (zz-n (qq-e1 b)) (zz-n (qq-e2 b))))
-                                     (true)
-                                     (false))]
-          [(and (qq? a) (zz? b)) (if (= (/ (zz-n (qq-e1 a)) (zz-n (qq-e2 a))) (zz-n b))
-                                     (true)
-                                     (false))]
-          [(and (zz? a) (qq? b)) (if (= (zz-n a) (/ (zz-n (qq-e1 b)) (zz-n (qq-e2 b))))
                                      (true)
                                      (false))]
           [(and (..? a) (..? b)) (if (zap_eq a b)
@@ -316,8 +309,28 @@
                        (false))]
           [#t (error "any not supported")])))
 
+(define (vars_logic e env)
+  (if (list? (vars-s e))
+      (fri (vars-e2 e) (fill_env (vars-s e) (vars-e1 e) env))
+      (begin (set! env (cons (cons (vars-s e) (fri (vars-e1 e) env)) env))
+             (fri (vars-e2 e) env))))
+
+(define (valof_logic e env)
+  (let ([ans (assoc (valof-s e) env)])
+    (if ans
+        (cdr ans)
+        (error "var not ion env"))))
 
 ;;;;; Functions. ;;;;;
+(define (call_logic e env)
+  (let ([o (fri (call-e e) env)])
+    (cond [(closure? o)
+           (if (proc? (closure-f o))
+               (fri (proc-body (closure-f o)) (closure-env o)) ; To je leksikalno, moram se pretvorit v dinamicno.
+               (fri (fun-body (closure-f o)) (let ([n_env (cons (cons (fun-name (closure-f o)) (closure-f o)) (closure-env o))])
+                                               (fill_env (fun-farg (closure-f o)) (call-args e) n_env))))]
+          [(fun? o) (call_logic (call o (call-args e)) env)]
+          [(error "fun call not correct")])))
 
 ;;;;; Macros. ;;;;;
 (define (numerator e1)
@@ -343,15 +356,15 @@
 (define (fri e env)
   (cond [(true? e) e]
         [(false? e) e]
-        [(zz? e) e]
-        [(qq? e) (qq_format e)]
+        [(zz? e) (if (integer? (zz-n e))
+                     e
+                     (error "zz mut have int value"))]
+        [(qq? e) (let ([sht (shorten (zz-n (qq-e1 e)) (zz-n (qq-e2 e)))])
+                       (qq_format (qq (zz (car sht)) (zz (cdr sht)))))]
         [(empty? e) e]
         [(..? e) (.. (fri (..-e1 e) env) (fri (..-e2 e) env))]
         [(s? e) e]
-        [(if-then-else? e) (let ([cnd (fri (if-then-else-condition e) env)])
-                             (cond [(true? cnd) (fri (if-then-else-e1 e) env)]
-                                   [(false? cnd) (fri (if-then-else-e2 e) env)]
-                                   [#t (error "if-then-else condition invalid")]))]
+        [(if-then-else? e) (if_the_else_logic e env)]
         [(is-zz?? e) (is-zz-fun (is-zz?-e1 e))]
         [(is-qq?? e) (is-qq-fun (is-qq?-e1 e))]
         [(is-bool?? e) (is-bool-fun (is-bool?-e1 e))]
@@ -369,20 +382,24 @@
         [(~? e) (neg_logic (~-e1 e) env)]
         [(all?? e) (all_logic (all?-e1 e) env)]
         [(any?? e) (any_logic (any?-e1 e) env)]
-        [(vars? e) (if (list? (vars-s e))
-                       (fri (vars-e2 e) (fill_env (vars-s e) (vars-e1 e) env))
-                       (begin (set! env (cons (cons (vars-s e) (fri (vars-e1 e) env)) env))
-                              (fri (vars-e2 e) env)))]
-        [(valof? e) (let ([ans (assoc (valof-s e) env)])
-                      (if ans
-                          (cdr ans)
-                          (error "var not ion env")))]
+        [(vars? e) (vars_logic e env)]
+        [(valof? e) (valof_logic e env)]
         [(proc? e) (closure env e)]
-        [(call? e) (let ([o (fri (call-e e) env)])
-                         (if (closure? o)
-                             (if (proc? (closure-f o))
-                                 (fri (proc-body (closure-f o)) (closure-env o))
-                                 (fri (fun-body (closure-f o)) (closure-env o)))
-                             (error "fun call not correct")))]
+        [(call? e) (call_logic e env)]
         [(fun? e) (closure env e)]
         [#t (error "expression not supported by FR")]))
+
+;;;;; Tests. ;;;;;
+; (fri (vars "a" (zz 1) (call (fun "sestej" null (add (valof "a") (zz 2))) null)) null)
+; (fri (vars "a" (zz 1) (call (proc "sestej" (add (valof "a") (zz 2))) null)) null)
+; (fri (if-then-else (false) (zz 1) (zz 2)) null)
+; (fri (vars (list "a" "b" "c") (list (add (zz 1) (zz 2)) (mul (zz 1) (zz 7)) (zz 4)) (valof "b")) null)
+; (fri (call (fun "f" (list "a" "b") (add (valof "a") (valof "b"))) (list (zz 1) (zz 2))) null)
+; (fri (call (fun "f" (list "a" "b") (add (valof "a") (valof "b"))) (list (mul (zz 5) (zz 6)) (add (zz 2) (zz 5)))) null)
+
+; (fri (call (fun "f" (list "n") (if-then-else (=? (valof "n") (zz 0))
+;                                              (zz 1)
+;                                              (mul (valof "n") (call (valof "f") (list (add (valof "n") (zz -1))))) )) (list (zz 5)))  null)
+
+; (require racket/trace)
+; (trace fri)
