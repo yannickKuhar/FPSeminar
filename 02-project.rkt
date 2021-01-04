@@ -327,7 +327,7 @@
     (cond [(qq? a) (qq-e1 a)]
           [(..? a) (..-e1 a)]
           [(s? a) (set-first (s-es a))]
-          [#t (error "left not supported")])))
+          [#t a])))
 
 (define (right_logic e1 env)
   (let ([a (fri e1 env)])
@@ -426,9 +426,18 @@
                                                                 (empty)
                                                                 (call (valof "f") (list (valof "seq"))))
                                                   (.. (call (valof "f") (list (left (valof "seq")))) (call (valof "map") (list (valof "f") (right (valof "seq"))))))) (list f seq)))
-(define (filtering f seq)
-  (zz -1))
 
+(define (filtering f seq)
+  (call (fun "filter" (list "f" "seq") (if-then-else (~ (is-seq? (valof "seq")))
+                                                  (if-then-else (is-empty? (valof "seq"))
+                                                                (empty)
+                                                                (if-then-else (call (valof "f") (list (valof "seq")))
+                                                                              (valof "seq")
+                                                                              (empty)))
+                                                  (if-then-else (call (valof "f") (list (left (valof "seq"))))
+                                                                (.. (left (valof "seq")) (call (valof "filter") (list (valof "f") (right (valof "seq")))))
+                                                                (call (valof "filter") (list (valof "f") (right (valof "seq"))))))) (list f seq)))
+                                             
 (define (folding f init seq)
   (if-then-else (is-empty? seq)
                 init
@@ -437,6 +446,8 @@
                                             (call f (list init (left seq)))
                                             (call f (list (left seq) (folding f init (right seq)))))
                               (zz -1))))
+
+; (trace filtering)
                               
 ;;;;; Main interpreter function. ;;;;;
 
@@ -513,3 +524,5 @@
 ; (folding (fun "f" (list "acc" "x") (add (valof "acc") (valof "x"))) (zz 0) (right (.. (zz 1) (.. (zz 2) (empty)))))
 
 ; (fri (mapping (fun "f" (list "a") (mul (valof "a") (zz 2))) (.. (zz 1) (empty))) null)
+; (fri (filtering (fun "f" (list "a") (is-zz? (valof "a"))) (.. (zz 1) (.. (zz 2) (.. (qq (zz 2) (zz 4)) (empty))))) null)
+; (fri (filtering (fun "f" (list "a") (is-zz? (valof "a"))) (.. (zz 1) (.. (zz 2) (.. (qq (zz 2) (zz 4)) (.. (.. (zz 5) (zz 6)) (empty)))))) null)
