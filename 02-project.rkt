@@ -2,6 +2,7 @@
 
 ; da ne izgubimo funkcij `numerator` in `denominator` zaradi "naših" makrojev 
 (require (rename-in racket (numerator qnumerator)(denominator qdenominator)))
+(require racket/trace)
 
 (provide false true zz qq .. empty s
          if-then-else
@@ -87,6 +88,26 @@
         [(proc? e) (get_vars (proc-body e))]
         [(call? e) (get_vars (call-e e))]))
 
+(define (rm_duplicates vars l acc)
+  (if (or (null? vars) (null? l))
+      acc
+      (let ([ans (assoc (car vars) acc)])
+        (if ans
+            (rm_duplicates (cdr vars) l acc)
+            (let ([val (assoc (car vars) l)])
+              (if val
+                  (rm_duplicates (cdr vars) (remove* (list val) l) (append acc (list val)))
+                  (rm_duplicates (cdr vars) l acc)))))))
+
+(define (rm_basic_duplicates l acc)
+  (if (null? l)
+      acc
+      (if (member (car l) acc)
+          (rm_basic_duplicates (cdr l) acc)
+          (rm_basic_duplicates (cdr l) (append acc (list (car l)))))))
+      
+
+; (trace rm_duplicates)
 
 (define (rm_env vs env)
   (if (null? vs)
@@ -455,7 +476,7 @@
         [(valof? e) (valof_logic e env)]
         [(proc? e) e]
         [(call? e) (call_logic e env)]
-        [(fun? e) (closure env e)]
+        [(fun? e) (closure (rm_duplicates (rm_basic_duplicates (get_vars (fun-body e)) null) (reverse env) null) e)]
         [#t (error "expression not supported by FR")]))
 
 ;;;;; Tests. ;;;;;
@@ -472,7 +493,6 @@
 
 ; (folding (lambda (acc x) acc + x) 0 (empty))
 
-(require racket/trace)
 ; (trace fri)
 ; (trace fill_env)
 ; (trace join)
