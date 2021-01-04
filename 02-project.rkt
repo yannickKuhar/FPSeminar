@@ -55,45 +55,93 @@
                             [#t e]))]
         [#t (error "can't fix non qq format")]))
 
+(define (get_vars e)
+  (cond [(true? e) null]
+        [(false? e) null]
+        [(empty? e) null]
+        [(zz? e) null]
+        [(qq? e) null]
+        [(s? e) null]
+        [(valof? e) (cons (valof-s e) null)]
+        [(..? e) (append (get_vars (..-e1 e)) (get_vars (..-e2 e)))]
+        [(if-then-else? e) (append (get_vars (if-then-else-condition e)) (get_vars (if-then-else-e1 e)) (get_vars (if-then-else-e2 e)))]
+        [(is-zz?? e) null]
+        [(is-qq?? e) null]
+        [(is-bool?? e) null]
+        [(is-seq?? e) (get_vars is-seq?-e1 e)]
+        [(is-proper-seq?? e) (get_vars is-proper-seq?-e1 e)]
+        [(is-empty?? e) null]
+        [(is-set?? e) null]
+        [(add? e) (append (get_vars (add-e1 e)) (get_vars (add-e2 e)))]
+        [(mul? e) (append (get_vars (mul-e1 e)) (get_vars (mul-e2 e)))]
+        [(leq?? e) (append (get_vars (leq?-e1 e)) (get_vars (leq?-e2 e)))]
+        [(rounding? e) null]
+        [(=?? e) (append (get_vars (=?-e1 e)) (get_vars (=?-e2 e)))]
+        [(left? e) (get_vars e)]
+        [(right? e) (get_vars e)]
+        [(~? e) (get_vars e)]
+        [(any?? e) (get_vars e)]
+        [(all?? e) (get_vars e)]
+        [(vars? e) null]
+        [(fun? e) (get_vars (fun-body e))]
+        [(proc? e) (get_vars (proc-body e))]
+        [(call? e) (get_vars (call-e e))]))
+
+
+(define (rm_env vs env)
+  (if (null? vs)
+      env
+      (rm_env (cdr vs) (filter (lambda (arg) (not (equal? (car arg) (car vs)))) env))))
+
+; (filter (lambda (arg) (not (equal? (car arg) "a"))) (list (cons "a" 5) (cons "a" 5) (cons "b" 5) (cons "c" 5)))
+      
+        
 ; Type checking functions.
-(define (is-zz-fun e1)
-  (if (zz? e1)
-      (true)
-      (false)))
+(define (is-zz-fun e1 env)
+  (let ([a (fri e1 env)])
+    (if (zz? a)
+        (true)
+        (false))))
 
-(define (is-qq-fun e1)
-  (if (qq? e1)
-      (true)
-      (false)))
+(define (is-qq-fun e1 env)
+  (let ([a (fri e1 env)])
+    (if (qq? a)
+        (true)
+        (false))))
 
-(define (is-bool-fun e1)
-  (if (or (true? e1) (false? e1))
-      (true)
-      (false)))
+(define (is-bool-fun e1 env)
+  (let ([a (fri e1 env)])
+    (if (or (true? a) (false? a))
+        (true)
+        (false))))
 
-(define (is-seq-fun e1)
-  (if (..? e1)
-      (true)
-      (false)))
+(define (is-seq-fun e1 env)
+  (let ([a (fri e1 env)])
+    (if (..? a)
+        (true)
+        (false))))
 
-(define (is-proper-seq-fun e1)
-  (if (..? e1)
-      (if (..? (..-e2 e1))
-          (is-proper-seq-fun (..-e2 e1))
-          (if (empty? (..-e2 e1))
-              (true)
-              (false)))
-      (false)))
+(define (is-proper-seq-fun e1 env)
+  (let ([a (fri e1 env)])
+    (if (..? a)
+        (if (..? (..-e2 a))
+            (is-proper-seq-fun (..-e2 a) env)
+            (if (empty? (..-e2 a))
+                (true)
+                (false)))
+        (false))))
 
-(define (is-empty-fun e1)
-  (if (empty? e1)
-      (true)
-      (false)))
+(define (is-empty-fun e1 env)
+  (let ([a (fri e1 env)])
+    (if (empty? a)
+        (true)
+        (false))))
 
-(define (is-set-fun e1)
-  (if (set? e1)
-      (true)
-      (false)))
+(define (is-set-fun e1 env)
+  (let ([a (fri e1 env)])
+    (if (set? a)
+        (true)
+        (false))))
 
 ;;;;; Operation logic functions. ;;;;;
 
@@ -262,10 +310,12 @@
 
 (define (right_logic e1 env)
   (let ([a (fri e1 env)])
+    (begin
+      (displayln a)
     (cond [(qq? a) (qq-e2 a)]
           [(..? a) (..-e2 a)]
           [(s? a) (set-rest (s-es a))]
-          [#t (error "right not supported")])))
+          [#t a]))))
 
 ; Neg logic.
 (define (neg_logic e1 env)
@@ -315,9 +365,9 @@
 (define (vars_logic e env)
   (if (list? (vars-s e))
       (fri (vars-e2 e) (fill_env (vars-s e) (vars-e1 e) env))
-      (begin ; (set! env (cons (cons (vars-s e) (fri (vars-e1 e) env)) env))
-             (set! env (append env (cons (cons (vars-s e) (fri (vars-e1 e) env)) null)))
-             (fri (vars-e2 e) env))))
+      (begin
+        (set! env (append env (cons (cons (vars-s e) (fri (vars-e1 e) env)) null)))
+        (fri (vars-e2 e) env))))
 
 (define (valof_logic e env)
   (let ([ans (assoc (valof-s e) (reverse env))])
@@ -329,11 +379,10 @@
 (define (call_logic e env)
   (let ([o (fri (call-e e) env)])
     (cond [(closure? o)
-           (if (proc? (closure-f o))
-               (fri (proc-body (closure-f o)) (closure-env o)) ; To je leksikalno, moram se pretvorit v dinamicno.
                (fri (fun-body (closure-f o)) (let ([n_env (cons (cons (fun-name (closure-f o)) (closure-f o)) (closure-env o))])
-                                               (fill_env (fun-farg (closure-f o)) (call-args e) n_env))))]
-          [(fun? o) (call_logic (call o (call-args e)) env)]
+                                               (fill_env (fun-farg (closure-f o)) (call-args e) n_env)))]
+          [(proc? o) (let ([n_env (cons (cons (proc-name o) o) env)]) (fri (proc-body o) env))]
+          [(fun? o) (call_logic (call o (call-args e)) env)] ; Valof "f" vrne (fun ...) ne pa (closure ...)
           [(error "fun call not correct")])))
 
 ;;;;; Macros. ;;;;;
@@ -356,17 +405,20 @@
   (zz -1))
 
 (define (folding f init seq)
-  (zz -1))
-
+  (if-then-else (is-empty? seq)
+                init
+                (if-then-else (is-seq? seq)
+                              (if-then-else (is-empty? (right seq))
+                                            (call f (list init (left seq)))
+                                            (call f (list (left seq) (folding f init (right seq)))))
+                              (zz -1))))
+                              
 ;;;;; Main interpreter function. ;;;;;
 
-; (fill_env (list "a" "b" "c") (list (zz 1) (zz 2) (zz 3)) null) vrne: '(("c" . (zz 3)) ("b" . (zz 2)) ("a" . (zz 1)))
-; Mogoce bi blo treba vrstni red popravit zarad sencenja? Kot kaze ne.
 (define (fill_env s e1 env)
   (if (null? s)
       env
       (begin
-        ; (set! env (cons (cons (car s) (fri (car e1) env)) env))
         (set! env (append env (cons (cons (car s) (fri (car e1) env)) null)))
         (fill_env (cdr s) (cdr e1) env))))
 
@@ -382,13 +434,13 @@
         [(..? e) (.. (fri (..-e1 e) env) (fri (..-e2 e) env))]
         [(s? e) e]
         [(if-then-else? e) (if_the_else_logic e env)]
-        [(is-zz?? e) (is-zz-fun (is-zz?-e1 e))]
-        [(is-qq?? e) (is-qq-fun (is-qq?-e1 e))]
-        [(is-bool?? e) (is-bool-fun (is-bool?-e1 e))]
-        [(is-seq?? e) (is-seq-fun (is-seq?-e1 e))]
-        [(is-proper-seq?? e) (is-proper-seq-fun (is-proper-seq?-e1 e))]
-        [(is-empty?? e) (is-empty-fun (is-empty?-e1 e))]
-        [(is-set?? e) (is-set-fun (is-set?-e1 e))]
+        [(is-zz?? e) (is-zz-fun (is-zz?-e1 e) env)]
+        [(is-qq?? e) (is-qq-fun (is-qq?-e1 e) env)]
+        [(is-bool?? e) (is-bool-fun (is-bool?-e1 e) env)]
+        [(is-seq?? e) (is-seq-fun (is-seq?-e1 e) env)]
+        [(is-proper-seq?? e) (is-proper-seq-fun (is-proper-seq?-e1 e) env)]
+        [(is-empty?? e) (is-empty-fun (is-empty?-e1 e) env)]
+        [(is-set?? e) (is-set-fun (is-set?-e1 e) env)]
         [(add? e) (add_logic (add-e1 e) (add-e2 e) env)]
         [(mul? e) (mul_logic (mul-e1 e) (mul-e2 e) env)]
         [(leq?? e) (leq_logic (leq?-e1 e) (leq?-e2 e) env)]
@@ -401,7 +453,7 @@
         [(any?? e) (any_logic (any?-e1 e) env)]
         [(vars? e) (vars_logic e env)]
         [(valof? e) (valof_logic e env)]
-        [(proc? e) (closure env e)]
+        [(proc? e) e]
         [(call? e) (call_logic e env)]
         [(fun? e) (closure env e)]
         [#t (error "expression not supported by FR")]))
@@ -418,9 +470,20 @@
 ;                                              (zz 1)
 ;                                              (mul (valof "n") (call (valof "f") (list (add (valof "n") (zz -1))))) )) (list (zz 5)))  null)
 
+; (folding (lambda (acc x) acc + x) 0 (empty))
+
 (require racket/trace)
 ; (trace fri)
 ; (trace fill_env)
-(trace join)
+; (trace join)
+; (trace get_vars)
 
 ; (fri (=? (zz 2) (qq (zz 4) (zz 2))) null)
+
+; (fri (folding (fun "" (list "acc" "z") (add (valof "acc") (valof "z"))) (zz 0) (.. (zz 2) (empty))) null)
+
+; (fri (right (.. (zz 1) (empty))) null)
+; (fri (is-empty? (right (.. (zz 1) (empty)))) null)
+; (fri (is-empty? (empty)) null)
+; (fri (folding (fun "" (list "acc" "z") (add (valof "acc") (valof "z"))) (zz 0) (.. (zz 1) (.. (zz 2) (empty)))) null)
+; (folding (fun "f" (list "acc" "x") (add (valof "acc") (valof "x"))) (zz 0) (right (.. (zz 1) (.. (zz 2) (empty)))))
