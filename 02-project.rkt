@@ -107,7 +107,6 @@
           (rm_basic_duplicates (cdr l) acc)
           (rm_basic_duplicates (cdr l) (append acc (list (car l)))))))
       
-
 ; (trace rm_duplicates)
 
 (define (rm_env vs env)
@@ -400,7 +399,7 @@
   (let ([o (fri (call-e e) env)])
     (cond [(closure? o)
                (fri (fun-body (closure-f o)) (letrec ([ans (assoc (fun-name (closure-f o)) env)]
-                                                      [n_env (if ans ; Ce je fun ze v env je ne dodamo.
+                                                      [n_env (if (or ans (equal? (fun-name (closure-f o)) "")) ; Ce je fun ze v env je ne dodamo.
                                                                  env
                                                                  (cons (cons (fun-name (closure-f o)) (closure-f o)) (closure-env o)))])
                                                (fill_env (fun-farg (closure-f o)) (call-args e) n_env)))]
