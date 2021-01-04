@@ -69,7 +69,7 @@
         [(is-zz?? e) null]
         [(is-qq?? e) null]
         [(is-bool?? e) null]
-        [(is-seq?? e) (get_vars is-seq?-e1 e)]
+        [(is-seq?? e) (get_vars (is-seq?-e1 e))]
         [(is-proper-seq?? e) (get_vars is-proper-seq?-e1 e)]
         [(is-empty?? e) null]
         [(is-set?? e) null]
@@ -78,15 +78,16 @@
         [(leq?? e) (append (get_vars (leq?-e1 e)) (get_vars (leq?-e2 e)))]
         [(rounding? e) null]
         [(=?? e) (append (get_vars (=?-e1 e)) (get_vars (=?-e2 e)))]
-        [(left? e) (get_vars e)]
-        [(right? e) (get_vars e)]
-        [(~? e) (get_vars e)]
-        [(any?? e) (get_vars e)]
-        [(all?? e) (get_vars e)]
+        [(left? e) (get_vars (left-e1 e))]
+        [(right? e) (get_vars (right-e1 e))]
+        [(~? e) (get_vars (~-e1 e))]
+        [(any?? e) (get_vars (any?-e1))]
+        [(all?? e) (get_vars (all?-e1))]
         [(vars? e) null]
         [(fun? e) (get_vars (fun-body e))]
         [(proc? e) (get_vars (proc-body e))]
-        [(call? e) (get_vars (call-e e))]))
+        [(call? e) (get_vars (call-e e))]
+        [#t null]))
 
 (define (rm_duplicates vars l acc)
   (if (or (null? vars) (null? l))
@@ -331,12 +332,10 @@
 
 (define (right_logic e1 env)
   (let ([a (fri e1 env)])
-    (begin
-      (displayln a)
     (cond [(qq? a) (qq-e2 a)]
           [(..? a) (..-e2 a)]
           [(s? a) (set-rest (s-es a))]
-          [#t a]))))
+          [#t a])))
 
 ; Neg logic.
 (define (neg_logic e1 env)
@@ -423,8 +422,11 @@
   (zz -1)) 
 
 (define (mapping f seq)
-  (zz -1))
-
+  (call (fun "map" (list "f" "seq") (if-then-else (~ (is-seq? (valof "seq")))
+                                                  (if-then-else (is-empty? (valof "seq"))
+                                                                (empty)
+                                                                (call (valof "f") (list (valof "seq"))))
+                                                  (.. (call (valof "f") (list (left (valof "seq")))) (call (valof "map") (list (valof "f") (right (valof "seq"))))))) (list f seq)))
 (define (filtering f seq)
   (zz -1))
 
@@ -510,3 +512,5 @@
 ; (fri (is-empty? (empty)) null)
 ; (fri (folding (fun "" (list "acc" "z") (add (valof "acc") (valof "z"))) (zz 0) (.. (zz 1) (.. (zz 2) (empty)))) null)
 ; (folding (fun "f" (list "acc" "x") (add (valof "acc") (valof "x"))) (zz 0) (right (.. (zz 1) (.. (zz 2) (empty)))))
+
+; (fri (mapping (fun "f" (list "a") (mul (valof "a") (zz 2))) (.. (zz 1) (empty))) null)
