@@ -439,16 +439,12 @@
                                                                 (call (valof "filter") (list (valof "f") (right (valof "seq"))))))) (list f seq)))
                                              
 (define (folding f init seq)
-  (if-then-else (is-empty? seq)
-                init
-                (if-then-else (is-seq? seq)
-                              (if-then-else (is-empty? (right seq))
-                                            (call f (list init (left seq)))
-                                            (call f (list (left seq) (folding f init (right seq)))))
-                              (zz -1))))
-
-; (trace filtering)
-                              
+  (call (fun "fold" (list "f" "init" "seq") (if-then-else (~ (is-seq? (valof "seq")))
+                                                          (if-then-else (is-empty? (valof "seq"))
+                                                                        (valof "init")
+                                                                        (call (valof "f") (list (valof "seq") (valof "init"))))
+                                                          (call (valof "f") (list (call (valof "fold") (list (valof "f") (valof "init") (right (valof "seq")))) (left (valof "seq")))))) (list f init seq)))
+                                                                                                                  
 ;;;;; Main interpreter function. ;;;;;
 
 (define (fill_env s e1 env)
@@ -526,3 +522,4 @@
 ; (fri (mapping (fun "f" (list "a") (mul (valof "a") (zz 2))) (.. (zz 1) (empty))) null)
 ; (fri (filtering (fun "f" (list "a") (is-zz? (valof "a"))) (.. (zz 1) (.. (zz 2) (.. (qq (zz 2) (zz 4)) (empty))))) null)
 ; (fri (filtering (fun "f" (list "a") (is-zz? (valof "a"))) (.. (zz 1) (.. (zz 2) (.. (qq (zz 2) (zz 4)) (.. (.. (zz 5) (zz 6)) (empty)))))) null)
+; (fri (folding (fun "f" (list "acc" "x") (add (valof "acc") (valof "x"))) (zz 0) (.. (zz 1) (zz 2))))
