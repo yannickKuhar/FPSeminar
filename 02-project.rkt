@@ -210,6 +210,8 @@
                                           [stev (+ (zz-n (qq-e1 b)) (* (zz-n (qq-e2 b)) (zz-n a)))]
                                           [sht (shorten stev imen)]) (qq_format (qq (zz (car sht)) (zz (cdr sht)))))]
           [(and (..? a) (..? b)) (join a b)]
+          [(and (empty? a) (..? b)) (join a b)]
+          [(and (..? a) (empty? b)) (join a b)]
           [(and (s? a) (s? b)) (s (set-union (s-es a) (s-es b)))]
           [(and (empty? a) (empty? b)) (empty)]
           [#t (error "add operation not supported")])))
@@ -418,7 +420,13 @@
   (~ (leq? e1 e2)))
 
 (define (inv e1)
-  (zz -1)) 
+  (if-then-else (is-seq? e1)
+                (call (fun "rev" (list "acc" "seq") (if-then-else (is-empty? (valof "seq"))
+                                                                  (valof "acc")
+                                                                  (call (valof "rev") (list (add (.. (left (valof "seq")) (empty)) (valof "acc")) (right (valof "seq")))))) (list (empty) e1))
+                (if-then-else (is-zz? e1)
+                              (qq (zz 1) e1)
+                              (qq (right e1) (left e1)))))
 
 (define (mapping f seq)
   (call (fun "map" (list "f" "seq") (if-then-else (~ (is-seq? (valof "seq")))
@@ -460,7 +468,9 @@
         [(zz? e) (if (integer? (zz-n e))
                      e
                      (error "zz mut have int value"))]
-        [(qq? e) (let ([sht (shorten (zz-n (qq-e1 e)) (zz-n (qq-e2 e)))])
+        [(qq? e) (letrec ([st (fri (qq-e1 e) env)]
+                          [im (fri (qq-e2 e) env)]
+                          [sht (shorten (zz-n st) (zz-n im))])
                        (qq_format (qq (zz (car sht)) (zz (cdr sht)))))]
         [(empty? e) e]
         [(..? e) (.. (fri (..-e1 e) env) (fri (..-e2 e) env))]
@@ -490,6 +500,8 @@
         [(fun? e) (closure (rm_duplicates (rm_basic_duplicates (get_vars (fun-body e)) null) (reverse env) null) e)]
         [#t (error "expression not supported by FR")]))
 
+(trace fri)
+
 ;;;;; Tests. ;;;;;
 ; (fri (vars "a" (zz 1) (call (fun "sestej" null (add (valof "a") (zz 2))) null)) null)
 ; (fri (vars "a" (zz 1) (call (proc "sestej" (add (valof "a") (zz 2))) null)) null)
@@ -501,14 +513,6 @@
 ; (fri (call (fun "f" (list "n") (if-then-else (=? (valof "n") (zz 0))
 ;                                              (zz 1)
 ;                                              (mul (valof "n") (call (valof "f") (list (add (valof "n") (zz -1))))) )) (list (zz 5)))  null)
-
-; (folding (lambda (acc x) acc + x) 0 (empty))
-
-; (trace fri)
-; (trace fill_env)
-; (trace join)
-; (trace get_vars)
-
 ; (fri (=? (zz 2) (qq (zz 4) (zz 2))) null)
 
 ; (fri (folding (fun "" (list "acc" "z") (add (valof "acc") (valof "z"))) (zz 0) (.. (zz 2) (empty))) null)
@@ -523,3 +527,6 @@
 ; (fri (filtering (fun "f" (list "a") (is-zz? (valof "a"))) (.. (zz 1) (.. (zz 2) (.. (qq (zz 2) (zz 4)) (empty))))) null)
 ; (fri (filtering (fun "f" (list "a") (is-zz? (valof "a"))) (.. (zz 1) (.. (zz 2) (.. (qq (zz 2) (zz 4)) (.. (.. (zz 5) (zz 6)) (empty)))))) null)
 ; (fri (folding (fun "f" (list "acc" "x") (add (valof "acc") (valof "x"))) (zz 0) (.. (zz 1) (zz 2))))
+; (fri (inv (qq (zz 2) (zz 3))) null)
+; (fri (inv (zz 3)) null)
+; (fri (inv (.. (zz 3) (empty))) null)
