@@ -89,6 +89,9 @@
         [(call? e) (get_vars (call-e e))]
         [#t null]))
 
+(define (list-copy list)
+  (if (null? list) '() (cons (car list) (list-copy (cdr list)))))
+
 (define (rm_duplicates vars l acc)
   (if (or (null? vars) (null? l))
       acc
@@ -189,8 +192,10 @@
   (if (not (..? z1))
       (if (empty? z1)
           z2
-          (.. z1 z2))
+          (join (.. z1 (empty)) z2))
       (.. (..-e1 z1) (join (..-e2 z1) z2))))
+
+; (trace join)
 
 (define (add_logic e1 e2 env)
   (let ([a (fri e1 env)]
@@ -212,6 +217,16 @@
           [(and (..? a) (..? b)) (join a b)]
           [(and (empty? a) (..? b)) (join a b)]
           [(and (..? a) (empty? b)) (join a b)]
+          [(and (zz? a) (..? b)) (join a b)]
+          [(and (..? a) (zz? b)) (join a b)]
+          [(and (qq? a) (..? b)) (join a b)]
+          [(and (..? a) (qq? b)) (join a b)]
+          [(and (s? a) (..? b)) (join a b)]
+          [(and (..? a) (s? b)) (join a b)]
+          [(and (true? a) (..? b)) (join a b)]
+          [(and (..? a) (true? b)) (join a b)]
+          [(and (false? a) (..? b)) (join a b)]
+          [(and (..? a) (false? b)) (join a b)]
           [(and (s? a) (s? b)) (s (set-union (s-es a) (s-es b)))]
           [(and (empty? a) (empty? b)) (empty)]
           [#t (error "add operation not supported")])))
@@ -394,7 +409,7 @@
   (let ([ans (assoc (valof-s e) (reverse env))])
     (if ans
         (cdr ans)
-        (error "var not in env"))))
+        (error (string-append  "var not in env: " (valof-s e))))))
 
 ;;;;; Functions. ;;;;;
 (define (call_logic e env)
@@ -421,8 +436,10 @@
 
 (define (inv e1)
   (if-then-else (is-seq? e1)
-                (call (fun "rev" (list "acc" "seq") (if-then-else (is-empty? (valof "seq"))
-                                                                  (valof "acc")
+                (call (fun "rev" (list "acc" "seq") (if-then-else (~ (is-seq? (valof "seq")))
+                                                                  (if-then-else (is-empty? (valof "seq"))
+                                                                                (valof "acc")
+                                                                                (add (valof "seq") (valof "acc")))
                                                                   (call (valof "rev") (list (add (.. (left (valof "seq")) (empty)) (valof "acc")) (right (valof "seq")))))) (list (empty) e1))
                 (if-then-else (is-zz? e1)
                               (qq (zz 1) e1)
@@ -497,10 +514,10 @@
         [(valof? e) (valof_logic e env)]
         [(proc? e) e]
         [(call? e) (call_logic e env)]
-        [(fun? e) (closure (rm_duplicates (rm_basic_duplicates (get_vars (fun-body e)) null) (reverse env) null) e)]
+        [(fun? e) (closure (rm_duplicates (rm_basic_duplicates (get_vars (fun-body e)) null) (reverse (list-copy env)) null) e)]
         [#t (error "expression not supported by FR")]))
 
-(trace fri)
+; (trace fri)
 
 ;;;;; Tests. ;;;;;
 ; (fri (vars "a" (zz 1) (call (fun "sestej" null (add (valof "a") (zz 2))) null)) null)
