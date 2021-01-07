@@ -84,10 +84,15 @@
         [(any?? e) (get_vars (any?-e1))]
         [(all?? e) (get_vars (all?-e1))]
         [(vars? e) null]
-        [(fun? e) (get_vars (fun-body e))]
+        [(fun? e) (append (fun-farg e) (get_vars (fun-body e)))]
         [(proc? e) (get_vars (proc-body e))]
-        [(call? e) (get_vars (call-e e))]
+        [(call? e) (append (get_vars (call-e e)) (sweep_args (call-args e) null))]
         [#t null]))
+
+(define (sweep_args args acc)
+  (if (null? args)
+      acc
+      (sweep_args (cdr args) (append acc (get_vars (car args))))))
 
 (define (list-copy list)
   (if (null? list) '() (cons (car list) (list-copy (cdr list)))))
@@ -415,13 +420,15 @@
 (define (call_logic e env)
   (let ([o (fri (call-e e) env)])
     (cond [(closure? o)
-               (fri (fun-body (closure-f o)) (letrec ([ans (assoc (fun-name (closure-f o)) env)]
-                                                      [n_env (if (or ans (equal? (fun-name (closure-f o)) "")) ; Ce je fun ze v env je ne dodamo.
-                                                                 env
-                                                                 (cons (cons (fun-name (closure-f o)) (closure-f o)) (closure-env o)))])
-                                               (fill_env (fun-farg (closure-f o)) (call-args e) n_env)))]
+               (letrec ([vars (rm_basic_duplicates (append (get_vars (fun-body (closure-f o))) (sweep_args (call-args e) null)) null)]
+                        [n_env1 (rm_duplicates vars (reverse env) null)]
+                        [ans (assoc (fun-name (closure-f o)) n_env1)]
+                        [n_env2 (if ans
+                                   n_env1
+                                   (cons (cons (fun-name (closure-f o)) (closure-f o)) n_env1))])
+                   (fri (fun-body (closure-f o)) (fill_env (fun-farg (closure-f o)) (call-args e) n_env2)))]
+          [(fun? o) (call_logic (call o (call-args e)) env)]
           [(proc? o) (let ([n_env (cons (cons (proc-name o) o) env)]) (fri (proc-body o) env))]
-          [(fun? o) (call_logic (call o (call-args e)) env)] ; Valof "f" vrne (fun ...) ne pa (closure ...)
           [(error "fun call not correct")])))
 
 ;;;;; Macros. ;;;;;
@@ -471,7 +478,6 @@
                                                           (call (valof "f") (list (call (valof "fold") (list (valof "f") (valof "init") (right (valof "seq")))) (left (valof "seq")))))) (list f init seq)))
                                                                                                                   
 ;;;;; Main interpreter function. ;;;;;
-
 (define (fill_env s e1 env)
   (if (null? s)
       env
@@ -513,8 +519,9 @@
         [(vars? e) (vars_logic e env)]
         [(valof? e) (valof_logic e env)]
         [(proc? e) e]
-        [(call? e) (call_logic e env)]
+        [(call? e) (call_logic e (list-copy env))]
         [(fun? e) (closure (rm_duplicates (rm_basic_duplicates (get_vars (fun-body e)) null) (reverse (list-copy env)) null) e)]
+        ; [(fun? e) (closure (list-copy env) e)]
         [#t (error "expression not supported by FR")]))
 
 ; (trace fri)
@@ -543,7 +550,18 @@
 ; (fri (mapping (fun "f" (list "a") (mul (valof "a") (zz 2))) (.. (zz 1) (empty))) null)
 ; (fri (filtering (fun "f" (list "a") (is-zz? (valof "a"))) (.. (zz 1) (.. (zz 2) (.. (qq (zz 2) (zz 4)) (empty))))) null)
 ; (fri (filtering (fun "f" (list "a") (is-zz? (valof "a"))) (.. (zz 1) (.. (zz 2) (.. (qq (zz 2) (zz 4)) (.. (.. (zz 5) (zz 6)) (empty)))))) null)
-; (fri (folding (fun "f" (list "acc" "x") (add (valof "acc") (valof "x"))) (zz 0) (.. (zz 1) (zz 2))))
+; (fri (folding (fun "" (list "acc" "x") (add (valof "acc") (valof "x"))) (zz 0) (.. (zz 1) (empty))) null)
+; (fri (folding (fun "f" (list "acc" "x") (add (valof "acc") (valof "x"))) (zz 0) (.. (zz 1) (.. (zz 2) (.. (zz 3) (zz 4))))) null)
 ; (fri (inv (qq (zz 2) (zz 3))) null)
 ; (fri (inv (zz 3)) null)
 ; (fri (inv (.. (zz 3) (empty))) null)
+
+; (define env2 (list (cons "a" (zz 5)) (cons "b" (zz 2)) (cons "c" (zz 3)) (cons "d" (zz 4)) (cons "g" (fun "f" (list "x" "z") (add (valof "x") (valof "z"))))))
+; (define env3 (list (cons "a" (zz 5)) (cons "b" (zz 2)) (cons "c" (zz 3)) (cons "d" (zz 4)) (cons "g" (fun "g" (list "x") (add (valof "x") (zz 2))))))
+; (define env4 (list (cons "g" (fun "g" (list "x") (add (valof "x") (zz 2))))))
+
+; (fri (call (fun "f" (list "x") (add (zz 2) (valof "x"))) (list (valof "a"))) env2)
+; (fri (call (fun "f" (list "x") (add (zz 2) (valof "x"))) (list (call (valof "g") (list (valof "a") (valof "b"))))) env2)
+; (fri (call (proc "p" (add (valof "a") (zz 2))) null) null)
+
+; (fri (call (fun "" null (inv (add (zz 2) (valof "a")))) null) (list (cons "a" (zz 5))))
