@@ -193,6 +193,8 @@
       (shorten (/ a g) (/ b g))
       (cons a b))))
 
+; (join (.. 1 (.. 2 (.. 3 (empty)))) (.. 4 (.. 5 (.. 6 7))))
+
 (define (join z1 z2)
   (if (not (..? z1))
       (if (empty? z1)
@@ -251,10 +253,10 @@
           [(and (qq? a) (qq? b)) (letrec ([imen (* (zz-n (qq-e2 a)) (zz-n (qq-e2 b)))]
                                           [stev (* (zz-n (qq-e1 a)) (zz-n (qq-e1 b)))]
                                           [sht (shorten stev imen)]) (qq_format (qq (zz (car sht)) (zz (cdr sht)))))]
-          [(and (qq? a) (zz? b)) (letrec ([imen (* (zz-n (qq-e2 a)) (zz-n b))]
+          [(and (qq? a) (zz? b)) (letrec ([imen (zz-n (qq-e2 a))]
                                           [stev (* (zz-n (qq-e1 a)) (zz-n b))]
                                           [sht (shorten stev imen)]) (qq_format (qq (zz (car sht)) (zz (cdr sht)))))]
-          [(and (zz? a) (qq? b)) (letrec ([imen (* (zz-n (qq-e2 b)) (zz-n a))]
+          [(and (zz? a) (qq? b)) (letrec ([imen (zz-n (qq-e2 b))]
                                           [stev (* (zz-n (qq-e1 b)) (zz-n a))]
                                           [sht (shorten stev imen)]) (qq_format (qq (zz (car sht)) (zz (cdr sht)))))]
           [(and (s? a) (s? b)) (s (cartps (s-es a) (s-es b)))]
@@ -263,9 +265,9 @@
 
 ; Leq logic.
 (define (zap_len zap)
-  (if (or (empty? zap) (not (..? zap)))
-      1
-      (+ 1 (zap_len (..-e2 zap)))))
+  (cond [(empty? zap) 0]
+        [(not (..? zap)) 1]
+        [#t (+ 1 (zap_len (..-e2 zap)))]))
 
 (define (leq_logic e1 e2 env)
   (let ([a (fri e1 env)]
@@ -315,7 +317,7 @@
   (let ([a (fri e1 env)])
     (cond [(qq? a) (qq-e2 a)]
           [(..? a) (..-e2 a)]
-          [(s? a) (set-rest (s-es a))]
+          [(s? a) (s (set-rest (s-es a)))]
           [#t a])))
 
 ; Neg logic.
@@ -336,7 +338,7 @@
 (define (any_zap zap)
   (if (..? zap)
       (or (not (equal? (..-e1 zap) (false))) (any_zap (..-e2 zap)))
-      (not (equal? zap (false)))))
+      (and (not (equal? zap (false))) (not (equal? zap (empty))))))
 
 (define (any_l l)
   (if (null? l)
@@ -367,43 +369,64 @@
 
 ;;;;; Variables. ;;;;;
 (define (fill_env s e1 env)
-  (append env (map cons s (map (lambda (e) (fri e env)) e1))))
+  (if (null? s)
+      env
+      (begin
+        (set! env (append env (cons (cons (car s) (fri (car e1) env)) null)))
+        (fill_env (cdr s) (cdr e1) env))))
+
+; (fill_env (list "f") (list (fun "f" (list "x") (add (valof "x") (zz 2)))) null)
 
 (define (vars_logic e env)
   (if (list? (vars-s e))
       (fri (vars-e2 e) (fill_env (vars-s e) (vars-e1 e) env))
       (begin
-        (fri (vars-e2 e) (append env (list (cons (vars-s e) (fri (vars-e1 e) env)) env))))))
+        (letrec ([val (fri (vars-e1 e) env)]
+              [val2 (if (closure? val)
+                           (closure-f val)
+                           val)])
+        (fri (vars-e2 e) (append env (list (cons (vars-s e) val2))))))))
 
 (define (valof_logic e env)
   (let ([ans (assoc (valof-s e) (reverse env))])
     (if ans
         (cdr ans)
-        (error (string-append  "var not in env: " (valof-s e))))))
+        (error (string-append "var not in env: " (valof-s e))))))
 
 ;;;;; Functions. ;;;;;
+(define (fill_closure_env s e1 env cl_env)
+  (if (null? s)
+      (if (list? cl_env)
+          cl_env
+          (list cl_env))
+      (let ([n_cl_env (append cl_env (list (cons (car s) (fri (car e1) env))))])
+        (fill_closure_env (cdr s) (cdr e1) env n_cl_env))))
+
+; (trace fill_closure_env)
+; (fill_closure_env (list "a") (list (valof "seq")) (list (cons "seq" (zz 4))) null)
+  
 (define (call_logic e env)
   (let ([o (fri (call-e e) env)])
     (cond [(closure? o)
-               (letrec ([vars (rm_basic_duplicates (append (get_vars (fun-body (closure-f o))) (sweep_args (call-args e) null)) null)]
-                        [n_env1 (rm_duplicates vars (reverse env) null)] ; To je dinamicno okolje.
-                        [ans (assoc (fun-name (closure-f o)) n_env1)]
-                        [n_env2 (if ans
-                                   n_env1
-                                   (cons (cons (fun-name (closure-f o)) (closure-f o)) n_env1))])
-                 ;(begin (displayln env)
-                        ;(displayln (closure-env o))
-                        ;(displayln "-------------")
-                   (fri (fun-body (closure-f o)) (fill_env (fun-farg (closure-f o)) (call-args e) n_env2)))]
+           (letrec ([vars (rm_basic_duplicates (append (get_vars (fun-body (closure-f o))) (sweep_args (call-args e) null)) null)]
+                    [n_env1 (fill_closure_env (fun-farg (closure-f o)) (call-args e) env (closure-env o)) ]
+                    [ans (assoc (fun-name (closure-f o)) n_env1)]
+                    [n_env2 (if ans
+                                n_env1
+                                (append n_env1 (list (cons (fun-name (closure-f o)) (closure-f o)))))])
+                 (fri (fun-body (closure-f o)) n_env2))]
           [(fun? o) (call_logic (call o (call-args e)) env)]
-          [(proc? o) (let ([n_env (cons (cons (proc-name o) o) env)]) (fri (proc-body o) env))]
+          [(proc? o) (let ([n_env (cons (cons (proc-name o) o) env)]) (fri (proc-body o) n_env))]
           [(error "fun call not correct")])))
+
+; (fri (mapping (fun "f" (list "a") (mul (valof "a") (zz 2))) (.. (zz 1) (empty))) null)
+; (fill_env (fun-farg (closure-f o)) (call-args e) n_env)
 
 ;;;;; Macros. ;;;;;
 (define (numerator e1)
   (left e1))
 
-(define (denumerator e1)
+(define (denominator e1)
   (right e1))
 
 (define (gt? e1 e2)
@@ -414,7 +437,7 @@
                 (call (fun "rev" (list "acc" "seq") (if-then-else (~ (is-seq? (valof "seq")))
                                                                   (if-then-else (is-empty? (valof "seq"))
                                                                                 (valof "acc")
-                                                                                (add (valof "seq") (valof "acc")))
+                                                                                (add (valof "seq") (valof "acc"))) ; Neprava zaporedja.
                                                                   (call (valof "rev") (list (add (.. (left (valof "seq")) (empty)) (valof "acc")) (right (valof "seq")))))) (list (empty) e1))
                 (if-then-else (is-zz? e1)
                               (qq (zz 1) e1)
@@ -481,7 +504,7 @@
         [(valof? e) (valof_logic e env)]
         [(proc? e) e]
         [(call? e) (call_logic e env)]
-        [(fun? e) (closure (list-copy env) e)] 
+        [(fun? e) (closure (rm_duplicates (rm_basic_duplicates (get_vars (fun-body e)) null) (reverse (list-copy env)) null) e)]
         [#t (error "expression not supported by FR")]))
 
 ; (trace fri)
@@ -494,9 +517,9 @@
 ; (fri (call (fun "f" (list "a" "b") (add (valof "a") (valof "b"))) (list (zz 1) (zz 2))) null)
 ; (fri (call (fun "f" (list "a" "b") (add (valof "a") (valof "b"))) (list (mul (zz 5) (zz 6)) (add (zz 2) (zz 5)))) null)
 
-;(fri (call (fun "f" (list "n") (if-then-else (=? (valof "n") (zz 0))
-;                                             (zz 1)
-;                                             (mul (valof "n") (call (valof "f") (list (add (valof "n") (zz -1))))) )) (list (zz 5)))  null)
+; (fri (call (fun "f" (list "n") (if-then-else (=? (valof "n") (zz 0))
+;                                              (zz 1)
+;                                              (mul (valof "n") (call (valof "f") (list (add (valof "n") (zz -1))))) )) (list (zz 5)))  null)
 ; (fri (=? (zz 2) (qq (zz 4) (zz 2))) null)
 
 ; (fri (folding (fun "" (list "acc" "z") (add (valof "acc") (valof "z"))) (zz 0) (.. (zz 2) (empty))) null)
@@ -518,10 +541,12 @@
 
 ; (define env2 (list (cons "a" (zz 5)) (cons "b" (zz 2)) (cons "c" (zz 3)) (cons "d" (zz 4)) (cons "g" (fun "f" (list "x" "z") (add (valof "x") (valof "z"))))))
 ; (define env3 (list (cons "a" (zz 5)) (cons "b" (zz 2)) (cons "c" (zz 3)) (cons "d" (zz 4)) (cons "g" (fun "g" (list "x") (add (valof "x") (zz 2))))))
-; (define env4 (list (cons "g" (fun "g" (list "x") (add (valof "x") (zz 2))))))
 
 ; (fri (call (fun "f" (list "x") (add (zz 2) (valof "x"))) (list (valof "a"))) env2)
 ; (fri (call (fun "f" (list "x") (add (zz 2) (valof "x"))) (list (call (valof "g") (list (valof "a") (valof "b"))))) env2)
 ; (fri (call (proc "p" (add (valof "a") (zz 2))) null) null)
 
 ; (fri (call (fun "" null (inv (add (zz 2) (valof "a")))) null) (list (cons "a" (zz 5))))
+
+; (define env5 (list (cons "f" (closure null (fun "f" (list "a") (mul (valof "a") (zz 2))))) (cons "seq" (zz 5))))
+; (fri (call (valof "f") (list (valof "seq"))) env5)
