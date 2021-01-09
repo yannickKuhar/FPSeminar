@@ -200,8 +200,6 @@
           (join (.. z1 (empty)) z2))
       (.. (..-e1 z1) (join (..-e2 z1) z2))))
 
-; (trace join)
-
 (define (add_logic e1 e2 env)
   (let ([a (fri e1 env)]
         [b (fri e2 env)])
@@ -240,17 +238,7 @@
 (define (cartps s1 s2)
   (letrec ([l1 (set->list s1)]
            [l2 (set->list s2)])
-    (list->set (cartp l1 l2))))
-
-(define (cartp l1 l2)
-  (if (null? l1)
-      null
-      (append (make_pairs (car l1) l2) (cartp (cdr l1) l2))))
-  
-(define (make_pairs e l)
-  (if (null? l)
-      null
-      (cons (.. e (car l)) (make_pairs e (cdr l)))))
+    (list->set (map (lambda (x) (.. (car x) (car (cdr x)))) (cartesian-product l1 l2)))))
 
 (define (mul_logic e1 e2 env)
   (let ([a (fri e1 env)]
@@ -308,40 +296,12 @@
           [#t (error "rounding not supported")])))
 
 ; =? logic.
-(define (zap_eq z1 z2)
-  (if (not (= (zap_len z1) (zap_len z2)))
-      #f
-      (if (and (..? z1) (..? z2))
-          (and (zap_eq (..-e1 z1) (..-e1 z2)) (zap_eq (..-e2 z1) (..-e2 z2)))
-          (cond [(and (true? z1) (true? z2)) #t]
-                [(and (empty? z1) (empty? z2)) #t]
-                [(and (false? z1) (false? z2)) #t]
-                [(and (zz? z1) (zz? z2)) (= (zz-n z1) (zz-n z2))]
-                [(and (qq? z1) (qq? z2)) (= (/ (zz-n (qq-e1 z1)) (zz-n (qq-e2 z1))) (/ (zz-n (qq-e1 z2)) (zz-n (qq-e2 z2))))]
-                [#t #f]))))
-          
 (define (eq_logic e1 e2 env)
   (let ([a (fri e1 env)]
         [b (fri e2 env)])
-    (cond [(and (false? a) (false? b)) (true)]
-          [(and (true? a) (false? b)) (false)]
-          [(and (false? a) (true? b)) (false)]
-          [(and (true? a) (true? b)) (true)]
-          [(and (zz? a)(zz? b)) (if (= (zz-n a) (zz-n b))
-                                    (true)
-                                    (false))]
-          [(and (qq? a) (qq? b)) (if (= (/ (zz-n (qq-e1 a)) (zz-n (qq-e2 a))) (/ (zz-n (qq-e1 b)) (zz-n (qq-e2 b))))
-                                     (true)
-                                     (false))]
-          [(and (..? a) (..? b)) (if (zap_eq a b)
-                                     (true)
-                                     (false))]
-          [(and (s? a) (s? b)) (if (equal? (s-es a) (s-es b))
-                                   (true)
-                                   (false))]
-          [#t (false)])))
-          
-; (.. (zz 1) (.. (zz 2) (.. (zz 3) (zz 4))))
+    (if (equal? a b)
+        (true)
+        (false))))
 
 ; Ecstraction loic.
 (define (left_logic e1 env)
@@ -361,7 +321,7 @@
 ; Neg logic.
 (define (neg_logic e1 env)
   (let ([a (fri e1 env)])
-    (cond [(zz? a) (zz (- 0 (zz-n a)))]
+    (cond [(zz? a) (zz (- (zz-n a)))]
           [(true? a) (false)]
           [(false? a) (true)]
           [(qq? a) (qq_format (qq (zz (- 0 (zz-n (qq-e1 a)))) (qq-e2 a)))]
@@ -385,7 +345,8 @@
       
 (define (all_logic e1 env)
   (let ([a (fri e1 env)])
-    (cond [(s? a) (if (set-member? (s-es a) (false))
+    (cond [(empty? a) (true)]
+          [(s? a) (if (set-member? (s-es a) (false))
                       (false)
                       (true))]
           [(..? a) (if (all_zap a)
@@ -401,14 +362,18 @@
           [(..? a) (if (any_zap a)
                        (true)
                        (false))]
+          [(empty? a) (false)]
           [#t (error "any not supported")])))
+
+;;;;; Variables. ;;;;;
+(define (fill_env s e1 env)
+  (append env (map cons s (map (lambda (e) (fri e env)) e1))))
 
 (define (vars_logic e env)
   (if (list? (vars-s e))
       (fri (vars-e2 e) (fill_env (vars-s e) (vars-e1 e) env))
       (begin
-        (set! env (append env (cons (cons (vars-s e) (fri (vars-e1 e) env)) null)))
-        (fri (vars-e2 e) env))))
+        (fri (vars-e2 e) (append env (list (cons (vars-s e) (fri (vars-e1 e) env)) env))))))
 
 (define (valof_logic e env)
   (let ([ans (assoc (valof-s e) (reverse env))])
@@ -421,11 +386,14 @@
   (let ([o (fri (call-e e) env)])
     (cond [(closure? o)
                (letrec ([vars (rm_basic_duplicates (append (get_vars (fun-body (closure-f o))) (sweep_args (call-args e) null)) null)]
-                        [n_env1 (rm_duplicates vars (reverse env) null)]
+                        [n_env1 (rm_duplicates vars (reverse env) null)] ; To je dinamicno okolje.
                         [ans (assoc (fun-name (closure-f o)) n_env1)]
                         [n_env2 (if ans
                                    n_env1
                                    (cons (cons (fun-name (closure-f o)) (closure-f o)) n_env1))])
+                 ;(begin (displayln env)
+                        ;(displayln (closure-env o))
+                        ;(displayln "-------------")
                    (fri (fun-body (closure-f o)) (fill_env (fun-farg (closure-f o)) (call-args e) n_env2)))]
           [(fun? o) (call_logic (call o (call-args e)) env)]
           [(proc? o) (let ([n_env (cons (cons (proc-name o) o) env)]) (fri (proc-body o) env))]
@@ -478,13 +446,6 @@
                                                           (call (valof "f") (list (call (valof "fold") (list (valof "f") (valof "init") (right (valof "seq")))) (left (valof "seq")))))) (list f init seq)))
                                                                                                                   
 ;;;;; Main interpreter function. ;;;;;
-(define (fill_env s e1 env)
-  (if (null? s)
-      env
-      (begin
-        (set! env (append env (cons (cons (car s) (fri (car e1) env)) null)))
-        (fill_env (cdr s) (cdr e1) env))))
-
 (define (fri e env)
   (cond [(true? e) e]
         [(false? e) e]
@@ -519,9 +480,8 @@
         [(vars? e) (vars_logic e env)]
         [(valof? e) (valof_logic e env)]
         [(proc? e) e]
-        [(call? e) (call_logic e (list-copy env))]
-        [(fun? e) (closure (rm_duplicates (rm_basic_duplicates (get_vars (fun-body e)) null) (reverse (list-copy env)) null) e)]
-        ; [(fun? e) (closure (list-copy env) e)]
+        [(call? e) (call_logic e env)]
+        [(fun? e) (closure (list-copy env) e)] 
         [#t (error "expression not supported by FR")]))
 
 ; (trace fri)
@@ -534,9 +494,9 @@
 ; (fri (call (fun "f" (list "a" "b") (add (valof "a") (valof "b"))) (list (zz 1) (zz 2))) null)
 ; (fri (call (fun "f" (list "a" "b") (add (valof "a") (valof "b"))) (list (mul (zz 5) (zz 6)) (add (zz 2) (zz 5)))) null)
 
-; (fri (call (fun "f" (list "n") (if-then-else (=? (valof "n") (zz 0))
-;                                              (zz 1)
-;                                              (mul (valof "n") (call (valof "f") (list (add (valof "n") (zz -1))))) )) (list (zz 5)))  null)
+;(fri (call (fun "f" (list "n") (if-then-else (=? (valof "n") (zz 0))
+;                                             (zz 1)
+;                                             (mul (valof "n") (call (valof "f") (list (add (valof "n") (zz -1))))) )) (list (zz 5)))  null)
 ; (fri (=? (zz 2) (qq (zz 4) (zz 2))) null)
 
 ; (fri (folding (fun "" (list "acc" "z") (add (valof "acc") (valof "z"))) (zz 0) (.. (zz 2) (empty))) null)
